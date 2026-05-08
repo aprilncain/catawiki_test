@@ -6,7 +6,7 @@ import fs from "node:fs";
 import path from "node:path";
 
 const root = process.cwd();
-const port = process.env.PORT ? Number(process.env.PORT) : 8080;
+const port = process.env.PORT ? Number(process.env.PORT) : 8081;
 
 const mime = {
   ".html": "text/html; charset=utf-8",
