@@ -1,0 +1,166 @@
+{
+  "version": 1,
+  "categories": [
+    {
+      "id": "archeology-natural-history",
+      "label": "Archeology & Natural History",
+      "colors": {
+        "background": "#0B1020",
+        "accent": "#C7A881",
+        "accent2": "#1F6FFF",
+        "text": "#FFFFFF"
+      }
+    },
+    {
+      "id": "art",
+      "label": "Art",
+      "colors": {
+        "background": "#0B1020",
+        "accent": "#A3CC86",
+        "accent2": "#1F6FFF",
+        "text": "#FFFFFF"
+      }
+    },
+    {
+      "id": "asian-tribal-art",
+      "label": "Asian & Tribal Art",
+      "colors": {
+        "background": "#0B1020",
+        "accent": "#639AC6",
+        "accent2": "#1F6FFF",
+        "text": "#FFFFFF"
+      }
+    },
+    {
+      "id": "books-comics",
+      "label": "Books & Comics",
+      "colors": {
+        "background": "#0B1020",
+        "accent": "#B0EADF",
+        "accent2": "#1F6FFF",
+        "text": "#FFFFFF"
+      }
+    }
+    ,
+    {
+      "id": "classic-cars-motorcycles-automobilia",
+      "label": "Classic Cars, Motorcycles & Automobilia",
+      "colors": {
+        "background": "#0B1020",
+        "accent": "#A2938F",
+        "accent2": "#1F6FFF",
+        "text": "#FFFFFF"
+      }
+    },
+    {
+      "id": "coins-stamps",
+      "label": "Coins & Stamps",
+      "colors": {
+        "background": "#0B1020",
+        "accent": "#D5D3E1",
+        "accent2": "#1F6FFF",
+        "text": "#FFFFFF"
+      }
+    },
+    {
+      "id": "cameras-computers",
+      "label": "Cameras & Computers",
+      "colors": {
+        "background": "#0B1020",
+        "accent": "#FBB763",
+        "accent2": "#1F6FFF",
+        "text": "#FFFFFF"
+      }
+    },
+    {
+      "id": "diamonds-gemstones",
+      "label": "Diamonds & Gemstones",
+      "colors": {
+        "background": "#0B1020",
+        "accent": "#AABAC7",
+        "accent2": "#1F6FFF",
+        "text": "#FFFFFF"
+      }
+    },
+    {
+      "id": "fashion",
+      "label": "Fashion",
+      "colors": {
+        "background": "#0B1020",
+        "accent": "#BBC5EC",
+        "accent2": "#1F6FFF",
+        "text": "#FFFFFF"
+      }
+    },
+    {
+      "id": "interiors-decorations",
+      "label": "Interiors & Decorations",
+      "colors": {
+        "background": "#0B1020",
+        "accent": "#CCECFF",
+        "accent2": "#1F6FFF",
+        "text": "#FFFFFF"
+      }
+    },
+    {
+      "id": "jewellery-watches",
+      "label": "Jewellery & Watches",
+      "colors": {
+        "background": "#0B1020",
+        "accent": "#86A7A8",
+        "accent2": "#1F6FFF",
+        "text": "#FFFFFF"
+      }
+    },
+    {
+      "id": "militaria-weaponry",
+      "label": "Militaria & Weaponry",
+      "colors": {
+        "background": "#0B1020",
+        "accent": "#959464",
+        "accent2": "#1F6FFF",
+        "text": "#FFFFFF"
+      }
+    },
+    {
+      "id": "music",
+      "label": "Music",
+      "colors": {
+        "background": "#0B1020",
+        "accent": "#DF6957",
+        "accent2": "#1F6FFF",
+        "text": "#FFFFFF"
+      }
+    },
+    {
+      "id": "sports-events",
+      "label": "Sports & Events",
+      "colors": {
+        "background": "#0B1020",
+        "accent": "#F8DD7A",
+        "accent2": "#1F6FFF",
+        "text": "#FFFFFF"
+      }
+    },
+    {
+      "id": "toys-models",
+      "label": "Toys & Models",
+      "colors": {
+        "background": "#0B1020",
+        "accent": "#FFB39F",
+        "accent2": "#1F6FFF",
+        "text": "#FFFFFF"
+      }
+    },
+    {
+      "id": "wine-whisky",
+      "label": "Wine & Whisky",
+      "colors": {
+        "background": "#0B1020",
+        "accent": "#AF6663",
+        "accent2": "#1F6FFF",
+        "text": "#FFFFFF"
+      }
+    }
+  ]
+}
