@@ -21,18 +21,7 @@ const ctx = els.canvas.getContext("2d", { willReadFrequently: true });
 if (!ctx) throw new Error("Canvas 2D unavailable");
 
 const RENDER = { w: 1920, h: 1080 };
-const MOTION = {
-  // Per brand portal direction: 0.6–0.8s, ease-in-out
-  durationMs: 700,
-  // Total cycle should be ~3s (transition + hold)
-  holdMs: 2300,
-  // Parallax shift (px). Keep subtle; frame sells the depth.
-  parallaxX: 36,
-  parallaxY: 18,
-  // "Forward" z motion strength
-  zCurrent: 0.14,
-  zNext: 0.06,
-};
+const PREVIEW_MS = 500;
 
 /** @type {{ categories: any[] }} */
 // @ts-ignore
@@ -45,8 +34,7 @@ const state = {
   active: 0,
   overlay: /** @type {null | HTMLImageElement} */ (null),
   overlayKey: "",
-  rafId: /** @type {number | null} */ (null),
-  holdTimeout: /** @type {number | null} */ (null),
+  timer: /** @type {any} */ (null),
   gifBytes: /** @type {null | Uint8Array} */ (null),
   encodeToken: 0,
   encoding: false,
@@ -108,114 +96,35 @@ function fitContain(srcW, srcH, dstW, dstH) {
   return { x: (dstW - w) / 0.75, y: (dstH - h) / 2, w, h };
 }
 
-function easeInOut(t) {
-  // Smoothstep (slow → fast → slow). Close enough to “ease-in-out 70–100”.
-  return t * t * (3 - 2 * t);
-}
-
-function drawImageWith(img, baseFit, opts) {
-  const fw = img.naturalWidth || img.width;
-  const fh = img.naturalHeight || img.height;
-  if (!fw || !fh) return;
-
-  const scale = opts.scale || 1;
-  const alpha = opts.alpha === undefined ? 1 : opts.alpha;
-  const dx = baseFit.x + (baseFit.w - baseFit.w * scale) / 2 + (opts.offsetX || 0);
-  const dy = baseFit.y + (baseFit.h - baseFit.h * scale) / 2 + (opts.offsetY || 0);
-  const dw = baseFit.w * scale;
-  const dh = baseFit.h * scale;
-
-  ctx.save();
-  ctx.globalAlpha = alpha;
-  ctx.drawImage(img, dx, dy, dw, dh);
-  ctx.restore();
-}
-
-function drawComposedFrame(fromIdx, toIdx, t01) {
+function drawFrame(i) {
+  const cat = getCategory();
   ctx.clearRect(0, 0, RENDER.w, RENDER.h);
-  const e = easeInOut(Math.max(0, Math.min(1, t01)));
 
-  const from = state.images[fromIdx]?.img || null;
-  const to = state.images[toIdx]?.img || null;
-
-  // Base fit computed per image so anchor/contain stays consistent.
-  // Parallax: background image shifts slightly as we move forward.
-  if (to) {
-    const fw = to.naturalWidth || to.width;
-    const fh = to.naturalHeight || to.height;
+  const img = state.images[i]?.img;
+  if (img) {
+    const fw = img.naturalWidth || img.width;
+    const fh = img.naturalHeight || img.height;
     const fit = fitContain(fw, fh, RENDER.w, RENDER.h);
-    drawImageWith(to, fit, {
-      alpha: e,
-      scale: 1 - MOTION.zNext + MOTION.zNext * e,
-      offsetX: (0.5 - e) * MOTION.parallaxX,
-      offsetY: (0.5 - e) * MOTION.parallaxY,
-    });
-  }
-  if (from) {
-    const fw = from.naturalWidth || from.width;
-    const fh = from.naturalHeight || from.height;
-    const fit = fitContain(fw, fh, RENDER.w, RENDER.h);
-    drawImageWith(from, fit, {
-      alpha: 1 - e,
-      scale: 1 + MOTION.zCurrent * e,
-      offsetX: (e - 0.5) * MOTION.parallaxX,
-      offsetY: (e - 0.5) * MOTION.parallaxY,
-    });
+    ctx.drawImage(img, fit.x, fit.y, fit.w, fit.h);
   }
 
-  // Frame always on top.
   if (state.overlay) ctx.drawImage(state.overlay, 0, 0, RENDER.w, RENDER.h);
 }
 
-function stopPreview() {
-  if (state.rafId != null) {
-    cancelAnimationFrame(state.rafId);
-    state.rafId = null;
-  }
-  if (state.holdTimeout != null) {
-    clearTimeout(state.holdTimeout);
-    state.holdTimeout = null;
-  }
-}
-
 function startPreview() {
-  stopPreview();
+  if (state.timer) clearInterval(state.timer);
   if (!state.images.length) return;
-  if (!els.autoPlay.checked || state.images.length < 2) {
-    drawComposedFrame(state.active, state.active, 0);
-    return;
-  }
-
-  const step = async (startTs) => {
-    const n = state.images.length;
-    const fromIdx = state.active % n;
-    const toIdx = (state.active + 1) % n;
-    const now = performance.now();
-
-    const t = (now - startTs) / MOTION.durationMs;
-    if (t < 1) {
-      drawComposedFrame(fromIdx, toIdx, t);
-      state.rafId = requestAnimationFrame(() => step(startTs));
-      return;
-    }
-
-    // Finish this transition
-    state.active = toIdx;
+  drawFrame(state.active);
+  if (!els.autoPlay.checked) return;
+  state.timer = setInterval(() => {
+    if (state.images.length < 2) return;
+    state.active = (state.active + 1) % state.images.length;
     renderThumbs();
-    drawComposedFrame(state.active, state.active, 0);
-
-    // Hold, then trigger next (underneath)
-    state.holdTimeout = setTimeout(() => {
-      if (!els.autoPlay.checked) return;
-      state.rafId = requestAnimationFrame(() => step(performance.now()));
-    }, MOTION.holdMs);
-  };
-
-  state.rafId = requestAnimationFrame(() => step(performance.now()));
+    drawFrame(state.active);
+  }, PREVIEW_MS);
 }
 
 async function updateGifBytes() {
-  // Keep simple: don't pre-encode (can be heavy). Just enable/disable the button.
   state.gifBytes = null;
   els.downloadBtn.disabled = state.images.length === 0;
 }
@@ -294,39 +203,15 @@ async function encodeGif() {
   }
   const w = RENDER.w, h = RENDER.h;
   const frames = [];
-  const n = state.images.length;
-  if (!n) return window.CWGIF.encodeGIF({ width: w, height: h, frames: [], loop: 0 });
-
-  // Sample the transition at ~15 fps for reasonable GIF size.
-  const sampleEveryMs = 66; // ~15fps
-  const steps = Math.max(1, Math.round(MOTION.durationMs / sampleEveryMs));
-  const holdCs = Math.max(1, Math.round(MOTION.holdMs / 10));
-
-  for (let i = 0; i < n; i++) {
-    const fromIdx = i;
-    const toIdx = (i + 1) % n;
-
-    for (let s = 0; s < steps; s++) {
-      const t = steps === 1 ? 1 : s / (steps - 1);
-      drawComposedFrame(fromIdx, toIdx, t);
-      let rgba;
-      try {
-        rgba = ctx.getImageData(0, 0, w, h).data;
-      } catch (e) {
-        throw new Error("GIF export blocked by browser security. Open via localhost (run `node serve.js`).");
-      }
-      frames.push({ rgba, delayCs: Math.max(1, Math.round(sampleEveryMs / 10)) });
-    }
-
-    // Hold on the fully arrived frame
-    drawComposedFrame(toIdx, toIdx, 0);
-    let rgbaHold;
+  for (let i = 0; i < state.images.length; i++) {
+    drawFrame(i);
+    let rgba;
     try {
-      rgbaHold = ctx.getImageData(0, 0, w, h).data;
+      rgba = ctx.getImageData(0, 0, w, h).data;
     } catch {
       throw new Error("GIF export blocked by browser security. Open via localhost (run `node serve.js`).");
     }
-    frames.push({ rgba: rgbaHold, delayCs: holdCs });
+    frames.push({ rgba, delayCs: Math.max(1, Math.round(PREVIEW_MS / 10)) });
   }
   return window.CWGIF.encodeGIF({ width: w, height: h, frames, loop: 0 });
 }
@@ -399,7 +284,6 @@ function init() {
     a.remove();
     setTimeout(() => URL.revokeObjectURL(url), 30_000);
     } catch (e) {
-      // Make failure visible without adding extra UI.
       alert(`Could not generate GIF. ${e?.message || String(e)}`);
     } finally {
       els.downloadBtn.textContent = prevLabel || "Download GIF";
