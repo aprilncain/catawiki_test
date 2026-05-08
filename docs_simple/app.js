@@ -22,6 +22,7 @@ if (!ctx) throw new Error("Canvas 2D unavailable");
 
 const RENDER = { w: 1920, h: 1080 };
 const PREVIEW_MS = 500;
+const EXPORT = { w: 1080, h: 608 };
 
 /** @type {{ categories: any[] }} */
 // @ts-ignore
@@ -201,13 +202,21 @@ async function encodeGif() {
   if (location.protocol === "file:") {
     throw new Error("Open via localhost (run `node serve.js`) to enable GIF export.");
   }
-  const w = RENDER.w, h = RENDER.h;
+  const w = EXPORT.w, h = EXPORT.h;
   const frames = [];
+  const exportCanvas = document.createElement("canvas");
+  exportCanvas.width = w;
+  exportCanvas.height = h;
+  const exportCtx = exportCanvas.getContext("2d", { willReadFrequently: true });
+  if (!exportCtx) throw new Error("Export canvas unavailable");
+
   for (let i = 0; i < state.images.length; i++) {
     drawFrame(i);
+    exportCtx.clearRect(0, 0, w, h);
+    exportCtx.drawImage(els.canvas, 0, 0, w, h);
     let rgba;
     try {
-      rgba = ctx.getImageData(0, 0, w, h).data;
+      rgba = exportCtx.getImageData(0, 0, w, h).data;
     } catch {
       throw new Error("GIF export blocked by browser security. Open via localhost (run `node serve.js`).");
     }
