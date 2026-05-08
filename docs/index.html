@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Catawiki LinkedIn GIF Generator</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400&family=DM+Sans:wght@400;700&family=DM+Serif+Display&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="./styles.css?v=simple-1" />
+  </head>
+  <body>
+    <header class="header">
+      <div class="header__inner">
+        <img class="brand__logo" src="./assets/_Catawiki_Brandmark_Blue+White.svg" alt="Catawiki" />
+        <div class="header__tagline">GIF generator</div>
+      </div>
+    </header>
+
+    <main class="layout">
+      <section class="controls">
+        <div class="controlRow">
+          <select id="category" class="select" aria-label="Category"></select>
+          <div id="themeSwatch" class="swatch" aria-hidden="true"></div>
+        </div>
+
+        <div id="dropzone" class="dropzone" tabindex="0" role="button" aria-label="Upload images">
+          <div class="dropzone__title">Upload images</div>
+          <input id="fileInput" class="dropzone__input" type="file" accept="image/*" multiple />
+        </div>
+
+        <div id="thumbs" class="thumbs" aria-label="Uploaded images"></div>
+
+        <label class="toggle">
+          <input id="autoPlay" type="checkbox" checked />
+          Auto preview
+        </label>
+
+        <button id="downloadBtn" class="button" type="button" disabled>Download GIF</button>
+
+        <!-- Hidden status for debugging without extra UI text -->
+        <div id="status" class="srOnly" aria-live="polite"></div>
+      </section>
+
+      <section class="preview">
+        <canvas id="canvas" width="1920" height="1080"></canvas>
+      </section>
+    </main>
+
+    <script src="./lib/gif.js?v=simple-1"></script>
+    <script src="./config/categories.js?v=simple-1"></script>
+    <script src="./app.js?v=simple-1"></script>
+  </body>
+</html>
