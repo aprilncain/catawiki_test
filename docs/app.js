@@ -1,4 +1,5 @@
 // Minimal, reliable GIF generator.
+// Mirrored from docs/simple/app.js; only preview transition differs (z-axis + parallax below).
 const must = (id) => {
   const el = document.getElementById(id);
   if (!el) throw new Error(`Missing #${id}`);
@@ -21,15 +22,15 @@ const ctx = els.canvas.getContext("2d", { willReadFrequently: true });
 if (!ctx) throw new Error("Canvas 2D unavailable");
 
 const RENDER = { w: 1920, h: 1080 };
+const PREVIEW_MS = 500;
+const EXPORT = { w: 1080, h: 608 };
+
+/** Full version only: motion tuning (preview + GIF sampling use drawComposedFrame). */
 const MOTION = {
-  // Per brand portal direction: 0.6–0.8s, ease-in-out
   durationMs: 700,
-  // Total cycle should be ~3s (transition + hold)
   holdMs: 2300,
-  // Parallax shift (px). Keep subtle; frame sells the depth.
   parallaxX: 36,
   parallaxY: 18,
-  // "Forward" z motion strength
   zCurrent: 0.14,
   zNext: 0.06,
 };
@@ -104,12 +105,10 @@ function fitContain(srcW, srcH, dstW, dstH) {
   const s = Math.min(dstW / srcW, dstH / srcH);
   const w = srcW * s;
   const h = srcH * s;
-  // Shift anchor to the right: (dstW - drawW) / 0.75
   return { x: (dstW - w) / 0.75, y: (dstH - h) / 2, w, h };
 }
 
 function easeInOut(t) {
-  // Smoothstep (slow → fast → slow). Close enough to “ease-in-out 70–100”.
   return t * t * (3 - 2 * t);
 }
 
@@ -138,8 +137,6 @@ function drawComposedFrame(fromIdx, toIdx, t01) {
   const from = state.images[fromIdx]?.img || null;
   const to = state.images[toIdx]?.img || null;
 
-  // Base fit computed per image so anchor/contain stays consistent.
-  // Parallax: background image shifts slightly as we move forward.
   if (to) {
     const fw = to.naturalWidth || to.width;
     const fh = to.naturalHeight || to.height;
@@ -163,7 +160,22 @@ function drawComposedFrame(fromIdx, toIdx, t01) {
     });
   }
 
-  // Frame always on top.
+  if (state.overlay) ctx.drawImage(state.overlay, 0, 0, RENDER.w, RENDER.h);
+}
+
+/** Used for GIF export only — same hard cut as /simple. */
+function drawFrame(i) {
+  const cat = getCategory();
+  ctx.clearRect(0, 0, RENDER.w, RENDER.h);
+
+  const img = state.images[i]?.img;
+  if (img) {
+    const fw = img.naturalWidth || img.width;
+    const fh = img.naturalHeight || img.height;
+    const fit = fitContain(fw, fh, RENDER.w, RENDER.h);
+    ctx.drawImage(img, fit.x, fit.y, fit.w, fit.h);
+  }
+
   if (state.overlay) ctx.drawImage(state.overlay, 0, 0, RENDER.w, RENDER.h);
 }
 
@@ -186,7 +198,7 @@ function startPreview() {
     return;
   }
 
-  const step = async (startTs) => {
+  const step = (startTs) => {
     const n = state.images.length;
     const fromIdx = state.active % n;
     const toIdx = (state.active + 1) % n;
@@ -199,12 +211,10 @@ function startPreview() {
       return;
     }
 
-    // Finish this transition
     state.active = toIdx;
     renderThumbs();
     drawComposedFrame(state.active, state.active, 0);
 
-    // Hold, then trigger next (underneath)
     state.holdTimeout = setTimeout(() => {
       if (!els.autoPlay.checked) return;
       state.rafId = requestAnimationFrame(() => step(performance.now()));
@@ -215,7 +225,6 @@ function startPreview() {
 }
 
 async function updateGifBytes() {
-  // Keep simple: don't pre-encode (can be heavy). Just enable/disable the button.
   state.gifBytes = null;
   els.downloadBtn.disabled = state.images.length === 0;
 }
@@ -241,7 +250,7 @@ function renderThumbs() {
     d.addEventListener("click", () => {
       state.active = idx;
       renderThumbs();
-      drawFrame(state.active);
+      drawComposedFrame(state.active, state.active, 0);
     });
     rm.addEventListener("click", (e) => {
       e.stopPropagation();
@@ -250,7 +259,7 @@ function renderThumbs() {
       state.active = Math.max(0, Math.min(state.active, state.images.length - 1));
       renderThumbs();
       startPreview();
-      drawFrame(state.active);
+      drawComposedFrame(state.active, state.active, 0);
       els.downloadBtn.disabled = state.images.length === 0;
     });
 
@@ -272,7 +281,6 @@ async function addFiles(fileList) {
   const list = Array.from(fileList).filter((f) => f.type.startsWith("image/"));
   if (!list.length) return;
 
-  // Append up to 5 total
   state.gifBytes = null;
   const remaining = Math.max(0, 5 - state.images.length);
   const toAdd = list.slice(0, remaining);
@@ -292,41 +300,25 @@ async function encodeGif() {
   if (location.protocol === "file:") {
     throw new Error("Open via localhost (run `node serve.js`) to enable GIF export.");
   }
-  const w = RENDER.w, h = RENDER.h;
+  const w = EXPORT.w, h = EXPORT.h;
   const frames = [];
-  const n = state.images.length;
-  if (!n) return window.CWGIF.encodeGIF({ width: w, height: h, frames: [], loop: 0 });
+  const exportCanvas = document.createElement("canvas");
+  exportCanvas.width = w;
+  exportCanvas.height = h;
+  const exportCtx = exportCanvas.getContext("2d", { willReadFrequently: true });
+  if (!exportCtx) throw new Error("Export canvas unavailable");
 
-  // Sample the transition at ~15 fps for reasonable GIF size.
-  const sampleEveryMs = 66; // ~15fps
-  const steps = Math.max(1, Math.round(MOTION.durationMs / sampleEveryMs));
-  const holdCs = Math.max(1, Math.round(MOTION.holdMs / 10));
-
-  for (let i = 0; i < n; i++) {
-    const fromIdx = i;
-    const toIdx = (i + 1) % n;
-
-    for (let s = 0; s < steps; s++) {
-      const t = steps === 1 ? 1 : s / (steps - 1);
-      drawComposedFrame(fromIdx, toIdx, t);
-      let rgba;
-      try {
-        rgba = ctx.getImageData(0, 0, w, h).data;
-      } catch (e) {
-        throw new Error("GIF export blocked by browser security. Open via localhost (run `node serve.js`).");
-      }
-      frames.push({ rgba, delayCs: Math.max(1, Math.round(sampleEveryMs / 10)) });
-    }
-
-    // Hold on the fully arrived frame
-    drawComposedFrame(toIdx, toIdx, 0);
-    let rgbaHold;
+  for (let i = 0; i < state.images.length; i++) {
+    drawFrame(i);
+    exportCtx.clearRect(0, 0, w, h);
+    exportCtx.drawImage(els.canvas, 0, 0, w, h);
+    let rgba;
     try {
-      rgbaHold = ctx.getImageData(0, 0, w, h).data;
+      rgba = exportCtx.getImageData(0, 0, w, h).data;
     } catch {
       throw new Error("GIF export blocked by browser security. Open via localhost (run `node serve.js`).");
     }
-    frames.push({ rgba: rgbaHold, delayCs: holdCs });
+    frames.push({ rgba, delayCs: Math.max(1, Math.round(PREVIEW_MS / 10)) });
   }
   return window.CWGIF.encodeGIF({ width: w, height: h, frames, loop: 0 });
 }
@@ -389,17 +381,16 @@ function init() {
     els.downloadBtn.textContent = "Preparing…";
     try {
       const bytes = await encodeGif();
-    const blob = new Blob([bytes], { type: "image/gif" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `catawiki_${state.categoryId || "category"}_${Date.now()}.gif`;
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-    setTimeout(() => URL.revokeObjectURL(url), 30_000);
+      const blob = new Blob([bytes], { type: "image/gif" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `catawiki_${state.categoryId || "category"}_${Date.now()}.gif`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 30_000);
     } catch (e) {
-      // Make failure visible without adding extra UI.
       alert(`Could not generate GIF. ${e?.message || String(e)}`);
     } finally {
       els.downloadBtn.textContent = prevLabel || "Download GIF";
