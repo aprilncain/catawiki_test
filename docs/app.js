@@ -23,7 +23,8 @@ if (!ctx) throw new Error("Canvas 2D unavailable");
 
 const RENDER = { w: 1920, h: 1080 };
 const PREVIEW_MS = 500;
-const EXPORT = { w: 1080, h: 608 };
+/** GIF export: 16:9, smaller than preview canvas for smaller files / faster encode. */
+const EXPORT = { w: 960, h: 540 };
 
 /** Full version only: motion tuning (preview + GIF sampling use drawComposedFrame). */
 const MOTION = {
@@ -300,7 +301,16 @@ async function encodeGif() {
   if (location.protocol === "file:") {
     throw new Error("Open via localhost (run `node serve.js`) to enable GIF export.");
   }
+  if (!window.CWGIF || typeof window.CWGIF.encodeGIF !== "function") {
+    throw new Error("GIF encoder missing (lib/gif.js did not load).");
+  }
+
+  // Preview must not run during capture — RAF would overwrite the canvas between drawFrame and getImageData.
+  stopPreview();
+  await new Promise((r) => requestAnimationFrame(() => r()));
+
   const w = EXPORT.w, h = EXPORT.h;
+  const pxBytes = w * h * 4;
   const frames = [];
   const exportCanvas = document.createElement("canvas");
   exportCanvas.width = w;
@@ -314,11 +324,16 @@ async function encodeGif() {
     exportCtx.drawImage(els.canvas, 0, 0, w, h);
     let rgba;
     try {
-      rgba = exportCtx.getImageData(0, 0, w, h).data;
+      const imgd = exportCtx.getImageData(0, 0, w, h);
+      rgba = new Uint8ClampedArray(imgd.data);
     } catch {
       throw new Error("GIF export blocked by browser security. Open via localhost (run `node serve.js`).");
     }
+    if (rgba.length !== pxBytes) {
+      throw new Error(`GIF export bad buffer length ${rgba.length} (expected ${pxBytes}).`);
+    }
     frames.push({ rgba, delayCs: Math.max(1, Math.round(PREVIEW_MS / 10)) });
+    await new Promise((r) => setTimeout(r, 0));
   }
   return window.CWGIF.encodeGIF({ width: w, height: h, frames, loop: 0 });
 }
@@ -395,6 +410,7 @@ function init() {
     } finally {
       els.downloadBtn.textContent = prevLabel || "Download GIF";
       els.downloadBtn.disabled = state.images.length === 0;
+      startPreview();
     }
   });
 

@@ -22,7 +22,8 @@ if (!ctx) throw new Error("Canvas 2D unavailable");
 
 const RENDER = { w: 1920, h: 1080 };
 const PREVIEW_MS = 500;
-const EXPORT = { w: 1080, h: 608 };
+/** GIF export: 16:9, smaller than preview canvas for smaller files / faster encode. */
+const EXPORT = { w: 960, h: 540 };
 
 /** @type {{ categories: any[] }} */
 // @ts-ignore
@@ -202,7 +203,18 @@ async function encodeGif() {
   if (location.protocol === "file:") {
     throw new Error("Open via localhost (run `node serve.js`) to enable GIF export.");
   }
+  if (!window.CWGIF || typeof window.CWGIF.encodeGIF !== "function") {
+    throw new Error("GIF encoder missing (lib/gif.js did not load).");
+  }
+
+  if (state.timer) {
+    clearInterval(state.timer);
+    state.timer = null;
+  }
+  await new Promise((r) => requestAnimationFrame(() => r()));
+
   const w = EXPORT.w, h = EXPORT.h;
+  const pxBytes = w * h * 4;
   const frames = [];
   const exportCanvas = document.createElement("canvas");
   exportCanvas.width = w;
@@ -216,11 +228,16 @@ async function encodeGif() {
     exportCtx.drawImage(els.canvas, 0, 0, w, h);
     let rgba;
     try {
-      rgba = exportCtx.getImageData(0, 0, w, h).data;
+      const imgd = exportCtx.getImageData(0, 0, w, h);
+      rgba = new Uint8ClampedArray(imgd.data);
     } catch {
       throw new Error("GIF export blocked by browser security. Open via localhost (run `node serve.js`).");
     }
+    if (rgba.length !== pxBytes) {
+      throw new Error(`GIF export bad buffer length ${rgba.length} (expected ${pxBytes}).`);
+    }
     frames.push({ rgba, delayCs: Math.max(1, Math.round(PREVIEW_MS / 10)) });
+    await new Promise((r) => setTimeout(r, 0));
   }
   return window.CWGIF.encodeGIF({ width: w, height: h, frames, loop: 0 });
 }
@@ -283,20 +300,21 @@ function init() {
     els.downloadBtn.textContent = "Preparing…";
     try {
       const bytes = await encodeGif();
-    const blob = new Blob([bytes], { type: "image/gif" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `catawiki_${state.categoryId || "category"}_${Date.now()}.gif`;
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-    setTimeout(() => URL.revokeObjectURL(url), 30_000);
+      const blob = new Blob([bytes], { type: "image/gif" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `catawiki_${state.categoryId || "category"}_${Date.now()}.gif`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 30_000);
     } catch (e) {
       alert(`Could not generate GIF. ${e?.message || String(e)}`);
     } finally {
       els.downloadBtn.textContent = prevLabel || "Download GIF";
       els.downloadBtn.disabled = state.images.length === 0;
+      startPreview();
     }
   });
 

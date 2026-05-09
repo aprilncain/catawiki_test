@@ -125,7 +125,8 @@
     let prefix = indices[0];
     for (let i = 1; i < indices.length; i++) {
       const k = indices[i];
-      const key = (prefix << 8) | k; // 16-bit key for speed
+      // Prefix is a GIF code (up to 12 bits); string key avoids any numeric packing edge cases.
+      const key = String(prefix) + "," + String(k);
       const existing = dict.get(key);
       if (existing !== undefined) {
         prefix = existing;
@@ -201,7 +202,8 @@
       sink.u8(0x21);
       sink.u8(0xf9);
       sink.u8(4);
-      const disposal = 2; // restore to background (works well for full-frame renders)
+      // Full-canvas frames: disposal 1 avoids “strip” artifacts in some decoders vs restore-to-bg.
+      const disposal = 1;
       const transpFlag = 1;
       sink.u8((disposal << 2) | transpFlag);
       sink.u16le(delayCs);
