@@ -1,4 +1,4 @@
-// Minimal, reliable GIF generator.
+// Minimal canvas preview; download as MP4/WebM via MediaRecorder.
 const must = (id) => {
   const el = document.getElementById(id);
   if (!el) throw new Error(`Missing #${id}`);
@@ -22,8 +22,11 @@ if (!ctx) throw new Error("Canvas 2D unavailable");
 
 const RENDER = { w: 1920, h: 1080 };
 const PREVIEW_MS = 500;
-/** GIF export: 16:9, smaller than preview canvas for smaller files / faster encode. */
-const EXPORT = { w: 960, h: 540 };
+
+const VIDEO = {
+  fps: 30,
+  videoBitsPerSecond: 5_000_000,
+};
 
 /** @type {{ categories: any[] }} */
 // @ts-ignore
@@ -199,12 +202,53 @@ async function addFiles(fileList) {
   await updateGifBytes();
 }
 
-async function encodeGif() {
-  if (location.protocol === "file:") {
-    throw new Error("Open via localhost (run `node serve.js`) to enable GIF export.");
+function sleep(ms) {
+  return new Promise((r) => setTimeout(r, ms));
+}
+
+function pickVideoMimeType() {
+  const list = [
+    "video/mp4; codecs=avc1.4d002a",
+    "video/mp4; codecs=avc1.42E01E",
+    "video/mp4",
+    "video/webm; codecs=vp9",
+    "video/webm; codecs=vp8",
+    "video/webm",
+  ];
+  if (typeof MediaRecorder === "undefined") return "";
+  for (const t of list) {
+    try {
+      if (MediaRecorder.isTypeSupported(t)) return t;
+    } catch (_) {
+      /* ignore */
+    }
   }
-  if (!window.CWGIF || typeof window.CWGIF.encodeGIF !== "function") {
-    throw new Error("GIF encoder missing (lib/gif.js did not load).");
+  return "";
+}
+
+function extForMime(mime) {
+  return mime.includes("mp4") ? "mp4" : "webm";
+}
+
+/** One full loop: each slide held PREVIEW_MS (same rhythm as autoplay). */
+async function playOneExportCycleSimple() {
+  const n = state.images.length;
+  if (n < 1) return;
+  drawFrame(0);
+  await sleep(50);
+  for (let i = 0; i < n; i++) {
+    drawFrame(i);
+    await sleep(PREVIEW_MS);
+  }
+}
+
+async function exportCanvasToVideoBlob() {
+  if (typeof MediaRecorder === "undefined") {
+    throw new Error("This browser does not support MediaRecorder (try current Chrome, Edge, or Safari).");
+  }
+  const mime = pickVideoMimeType();
+  if (!mime) {
+    throw new Error("No supported video codec for recording in this browser.");
   }
 
   if (state.timer) {
@@ -213,33 +257,35 @@ async function encodeGif() {
   }
   await new Promise((r) => requestAnimationFrame(() => r()));
 
-  const w = EXPORT.w, h = EXPORT.h;
-  const pxBytes = w * h * 4;
-  const frames = [];
-  const exportCanvas = document.createElement("canvas");
-  exportCanvas.width = w;
-  exportCanvas.height = h;
-  const exportCtx = exportCanvas.getContext("2d", { willReadFrequently: true });
-  if (!exportCtx) throw new Error("Export canvas unavailable");
+  drawFrame(state.active);
+  await new Promise((r) => requestAnimationFrame(() => r()));
 
-  for (let i = 0; i < state.images.length; i++) {
-    drawFrame(i);
-    exportCtx.clearRect(0, 0, w, h);
-    exportCtx.drawImage(els.canvas, 0, 0, w, h);
-    let rgba;
-    try {
-      const imgd = exportCtx.getImageData(0, 0, w, h);
-      rgba = new Uint8ClampedArray(imgd.data);
-    } catch {
-      throw new Error("GIF export blocked by browser security. Open via localhost (run `node serve.js`).");
-    }
-    if (rgba.length !== pxBytes) {
-      throw new Error(`GIF export bad buffer length ${rgba.length} (expected ${pxBytes}).`);
-    }
-    frames.push({ rgba, delayCs: Math.max(1, Math.round(PREVIEW_MS / 10)) });
-    await new Promise((r) => setTimeout(r, 0));
+  const stream = els.canvas.captureStream(VIDEO.fps);
+  let rec;
+  try {
+    rec = new MediaRecorder(stream, { mimeType: mime, videoBitsPerSecond: VIDEO.videoBitsPerSecond });
+  } catch (_) {
+    rec = new MediaRecorder(stream, { mimeType: mime });
   }
-  return window.CWGIF.encodeGIF({ width: w, height: h, frames, loop: 0 });
+
+  const chunks = /** @type {Blob[]} */ ([]);
+  rec.addEventListener("dataavailable", (e) => {
+    if (e.data && e.data.size > 0) chunks.push(e.data);
+  });
+  const stopped = new Promise((resolve) => {
+    rec.addEventListener("stop", () => resolve(), { once: true });
+  });
+
+  rec.start(200);
+  await playOneExportCycleSimple();
+  rec.stop();
+  await stopped;
+
+  stream.getTracks().forEach((t) => t.stop());
+  if (!chunks.length) {
+    throw new Error("Recording produced no video data.");
+  }
+  return { blob: new Blob(chunks, { type: mime }), ext: extForMime(mime) };
 }
 
 async function onCategoryChanged() {
@@ -299,20 +345,19 @@ function init() {
     els.downloadBtn.disabled = true;
     els.downloadBtn.textContent = "Preparing…";
     try {
-      const bytes = await encodeGif();
-      const blob = new Blob([bytes], { type: "image/gif" });
+      const { blob, ext } = await exportCanvasToVideoBlob();
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
-      a.download = `catawiki_${state.categoryId || "category"}_${Date.now()}.gif`;
+      a.download = `catawiki_${state.categoryId || "category"}_${Date.now()}.${ext}`;
       document.body.appendChild(a);
       a.click();
       a.remove();
       setTimeout(() => URL.revokeObjectURL(url), 30_000);
     } catch (e) {
-      alert(`Could not generate GIF. ${e?.message || String(e)}`);
+      alert(`Could not export video. ${e?.message || String(e)}`);
     } finally {
-      els.downloadBtn.textContent = prevLabel || "Download GIF";
+      els.downloadBtn.textContent = prevLabel || "Download video";
       els.downloadBtn.disabled = state.images.length === 0;
       startPreview();
     }
