@@ -21,8 +21,7 @@ const ctx = els.canvas.getContext("2d", { willReadFrequently: true });
 if (!ctx) throw new Error("Canvas 2D unavailable");
 
 const RENDER = { w: 1920, h: 1080 };
-/** How long each slide stays on screen in autoplay and in video export (simple build). */
-const SLIDE_HOLD_MS = 1500;
+const PREVIEW_MS = 500;
 
 const VIDEO = {
   fps: 30,
@@ -137,10 +136,6 @@ function drawFrame(i) {
 function startPreview() {
   if (state.timer) clearInterval(state.timer);
   if (!state.images.length) return;
-  if (els.autoPlay.checked) {
-    state.active = 0;
-    renderThumbs();
-  }
   drawFrame(state.active);
   if (!els.autoPlay.checked) return;
   state.timer = setInterval(() => {
@@ -148,7 +143,7 @@ function startPreview() {
     state.active = (state.active + 1) % state.images.length;
     renderThumbs();
     drawFrame(state.active);
-  }, SLIDE_HOLD_MS);
+  }, PREVIEW_MS);
 }
 
 async function updateGifBytes() {
@@ -253,16 +248,17 @@ function extForMime(mime) {
 }
 
 /**
- * One export pass: first → last, each held SLIDE_HOLD_MS (matches autoplay order).
- * Caller must already have drawn slide 0 on the canvas; we hold it once, then 1…n−1.
+ * One export pass: slide 0 → last slide, each held PREVIEW_MS (same as autoplay).
+ * Does not return to slide 0 after the last image — file ends on the final hold.
  */
 async function playOneExportCycleSimple() {
   const n = state.images.length;
   if (n < 1) return;
-  await sleep(SLIDE_HOLD_MS);
-  for (let i = 1; i < n; i++) {
+  drawFrame(0);
+  await sleep(50);
+  for (let i = 0; i < n; i++) {
     drawFrame(i);
-    await sleep(SLIDE_HOLD_MS);
+    await sleep(PREVIEW_MS);
   }
 }
 
