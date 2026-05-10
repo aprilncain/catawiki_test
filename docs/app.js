@@ -122,7 +122,7 @@ function fitContain(srcW, srcH, dstW, dstH) {
     w = srcW * s;
     h = srcH * s;
   }
-  return { x: (dstW - w) / 0.75, y: (dstH - h) / 2, w, h };
+  return { x: (dstW - w) / 2, y: (dstH - h) / 2, w, h };
 }
 
 function easeInOut(t) {
