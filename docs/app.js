@@ -35,9 +35,15 @@ const MOTION = {
 };
 
 const VIDEO = {
-  fps: 30,
+  fps: 25,
   videoBitsPerSecond: 5_000_000,
+  /** Record this many full carousel passes in one file (2 helps MP4→GIF tools that decimate frames). */
+  carouselLoops: 1,
 };
+
+function exportFrameMs() {
+  return 1000 / VIDEO.fps;
+}
 
 /** @type {{ categories: any[] }} */
 // @ts-ignore
@@ -331,26 +337,40 @@ function extForMime(mime) {
   return mime.includes("mp4") ? "mp4" : "webm";
 }
 
-/** One full loop through all slides, same timing as preview export. */
-async function playOneExportCycleFullMotion() {
+/**
+ * One full loop through all slides, same durations as preview.
+ * Steps at VIDEO.fps (not requestAnimationFrame) so each encoded frame aligns with
+ * captureStream(VIDEO.fps); otherwise MP4→GIF pipelines often see choppy / decimated motion.
+ */
+async function playOneExportCycleFullMotion(opts = { leadIn: true }) {
   const n = state.images.length;
   if (n < 1) return;
-  drawComposedFrame(0, 0, 0);
-  await sleep(50);
+  const dt = exportFrameMs();
+
+  if (opts.leadIn) {
+    drawComposedFrame(0, 0, 0);
+    await sleep(50);
+  }
+
   for (let i = 0; i < n; i++) {
     const fromIdx = i;
     const toIdx = (i + 1) % n;
-    const start = performance.now();
-    while (true) {
-      const t = (performance.now() - start) / MOTION.durationMs;
-      if (t >= 1) {
-        drawComposedFrame(toIdx, toIdx, 0);
-        break;
-      }
-      drawComposedFrame(fromIdx, toIdx, Math.min(1, t));
-      await new Promise((r) => requestAnimationFrame(r));
+
+    let elapsed = 0;
+    while (elapsed < MOTION.durationMs) {
+      const t = Math.min(1, elapsed / MOTION.durationMs);
+      drawComposedFrame(fromIdx, toIdx, t);
+      await sleep(dt);
+      elapsed += dt;
     }
-    await sleep(MOTION.holdMs);
+    drawComposedFrame(toIdx, toIdx, 0);
+
+    let holdLeft = MOTION.holdMs;
+    while (holdLeft > 0) {
+      const step = Math.min(dt, holdLeft);
+      await sleep(step);
+      holdLeft -= step;
+    }
   }
 }
 
@@ -386,7 +406,11 @@ async function exportCanvasToVideoBlob() {
   });
 
   rec.start(200);
-  await playOneExportCycleFullMotion();
+  const loops = Math.max(1, Math.floor(Number(VIDEO.carouselLoops)) || 1);
+  for (let loop = 0; loop < loops; loop++) {
+    // eslint-disable-next-line no-await-in-loop
+    await playOneExportCycleFullMotion({ leadIn: loop === 0 });
+  }
   rec.stop();
   await stopped;
 

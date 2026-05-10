@@ -21,7 +21,8 @@ const ctx = els.canvas.getContext("2d", { willReadFrequently: true });
 if (!ctx) throw new Error("Canvas 2D unavailable");
 
 const RENDER = { w: 1920, h: 1080 };
-const PREVIEW_MS = 500;
+/** How long each slide stays on screen in autoplay and in video export (simple build). */
+const SLIDE_HOLD_MS = 1500;
 
 const VIDEO = {
   fps: 30,
@@ -143,7 +144,7 @@ function startPreview() {
     state.active = (state.active + 1) % state.images.length;
     renderThumbs();
     drawFrame(state.active);
-  }, PREVIEW_MS);
+  }, SLIDE_HOLD_MS);
 }
 
 async function updateGifBytes() {
@@ -247,15 +248,13 @@ function extForMime(mime) {
   return mime.includes("mp4") ? "mp4" : "webm";
 }
 
-/** One full loop: each slide held PREVIEW_MS (same rhythm as autoplay). */
+/** One full pass: each slide held SLIDE_HOLD_MS (same rhythm as autoplay). */
 async function playOneExportCycleSimple() {
   const n = state.images.length;
   if (n < 1) return;
-  drawFrame(0);
-  await sleep(50);
   for (let i = 0; i < n; i++) {
     drawFrame(i);
-    await sleep(PREVIEW_MS);
+    await sleep(SLIDE_HOLD_MS);
   }
 }
 
@@ -274,7 +273,9 @@ async function exportCanvasToVideoBlob() {
   }
   await new Promise((r) => requestAnimationFrame(() => r()));
 
-  drawFrame(state.active);
+  state.active = 0;
+  renderThumbs();
+  drawFrame(0);
   await new Promise((r) => requestAnimationFrame(() => r()));
 
   const stream = els.canvas.captureStream(VIDEO.fps);
