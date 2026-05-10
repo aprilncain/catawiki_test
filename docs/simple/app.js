@@ -28,6 +28,33 @@ const VIDEO = {
   videoBitsPerSecond: 5_000_000,
 };
 
+function exportFrameMs() {
+  return 1000 / VIDEO.fps;
+}
+
+/**
+ * Export-only: hold `slideIndex` for `totalMs` while pacing the capture track.
+ * `await sleep(totalMs)` on an unchanged canvas often records a much shorter clip
+ * (browser does not advance the MediaStream timeline without repeated captures).
+ */
+async function holdSlideMsForCapture(videoTrack, slideIndex, totalMs) {
+  const dt = exportFrameMs();
+  let left = totalMs;
+  while (left > 0) {
+    const step = Math.min(dt, left);
+    drawFrame(slideIndex);
+    if (videoTrack && typeof videoTrack.requestFrame === "function") {
+      try {
+        videoTrack.requestFrame();
+      } catch (_) {
+        /* ignore */
+      }
+    }
+    await sleep(step);
+    left -= step;
+  }
+}
+
 /** @type {{ categories: any[] }} */
 // @ts-ignore
 const CATS = window.CW_CATEGORIES || { categories: [] };
@@ -251,14 +278,12 @@ function extForMime(mime) {
  * One export pass: slide 0 → last slide, each held PREVIEW_MS (same as autoplay).
  * Does not return to slide 0 after the last image — file ends on the final hold.
  */
-async function playOneExportCycleSimple() {
+async function playOneExportCycleSimple(videoTrack) {
   const n = state.images.length;
   if (n < 1) return;
-  drawFrame(0);
-  await sleep(50);
   for (let i = 0; i < n; i++) {
-    drawFrame(i);
-    await sleep(PREVIEW_MS);
+    // eslint-disable-next-line no-await-in-loop
+    await holdSlideMsForCapture(videoTrack, i, PREVIEW_MS);
   }
 }
 
@@ -283,6 +308,7 @@ async function exportCanvasToVideoBlob() {
   await new Promise((r) => requestAnimationFrame(() => r()));
 
   const stream = els.canvas.captureStream(VIDEO.fps);
+  const [videoTrack] = stream.getVideoTracks();
   let rec;
   try {
     rec = new MediaRecorder(stream, { mimeType: mime, videoBitsPerSecond: VIDEO.videoBitsPerSecond });
@@ -299,7 +325,15 @@ async function exportCanvasToVideoBlob() {
   });
 
   rec.start(200);
-  await playOneExportCycleSimple();
+  await playOneExportCycleSimple(videoTrack);
+  if (typeof rec.requestData === "function") {
+    try {
+      rec.requestData();
+    } catch (_) {
+      /* ignore */
+    }
+  }
+  await sleep(Math.max(exportFrameMs() * 4, 120));
   rec.stop();
   await stopped;
 
