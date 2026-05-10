@@ -137,6 +137,10 @@ function drawFrame(i) {
 function startPreview() {
   if (state.timer) clearInterval(state.timer);
   if (!state.images.length) return;
+  if (els.autoPlay.checked) {
+    state.active = 0;
+    renderThumbs();
+  }
   drawFrame(state.active);
   if (!els.autoPlay.checked) return;
   state.timer = setInterval(() => {
@@ -248,11 +252,15 @@ function extForMime(mime) {
   return mime.includes("mp4") ? "mp4" : "webm";
 }
 
-/** One full pass: each slide held SLIDE_HOLD_MS (same rhythm as autoplay). */
+/**
+ * One export pass: first → last, each held SLIDE_HOLD_MS (matches autoplay order).
+ * Caller must already have drawn slide 0 on the canvas; we hold it once, then 1…n−1.
+ */
 async function playOneExportCycleSimple() {
   const n = state.images.length;
   if (n < 1) return;
-  for (let i = 0; i < n; i++) {
+  await sleep(SLIDE_HOLD_MS);
+  for (let i = 1; i < n; i++) {
     drawFrame(i);
     await sleep(SLIDE_HOLD_MS);
   }
