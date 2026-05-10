@@ -16,6 +16,11 @@ window.CW_CATEGORIES = {
     },
     { id: "books-comics", label: "Books & Comics", colors: { background: "#0B1020", accent: "#B0EADF", accent2: "#1F6FFF", text: "#FFFFFF" } },
     {
+      id: "books-historical-memorabilia",
+      label: "Books & Historical Memorabilia",
+      colors: { background: "#0B1020", accent: "#A1AF88", accent2: "#1F6FFF", text: "#FFFFFF" },
+    },
+    {
       id: "classic-cars-motorcycles-automobilia",
       label: "Classic Cars, Motorcycles & Automobilia",
       colors: { background: "#0B1020", accent: "#A2938F", accent2: "#1F6FFF", text: "#FFFFFF" },
