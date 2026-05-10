@@ -93,16 +93,27 @@ function loadOverlayForCategory(cat) {
   });
 }
 
+/** Portrait (taller than wide): scale so drawn width = this fraction of frame width (may extend past top/bottom). */
+const PORTRAIT_TARGET_WIDTH_RATIO = 0.75;
+
 function fitContain(srcW, srcH, dstW, dstH) {
-  const s = Math.min(dstW / srcW, dstH / srcH);
-  const w = srcW * s;
-  const h = srcH * s;
-  // Shift anchor to the right: (dstW - drawW) / 0.75
+  const portrait = srcH > srcW;
+  let s;
+  let w;
+  let h;
+  if (portrait) {
+    w = dstW * PORTRAIT_TARGET_WIDTH_RATIO;
+    s = w / srcW;
+    h = srcH * s;
+  } else {
+    s = Math.min(dstW / srcW, dstH / srcH);
+    w = srcW * s;
+    h = srcH * s;
+  }
   return { x: (dstW - w) / 0.75, y: (dstH - h) / 2, w, h };
 }
 
 function drawFrame(i) {
-  const cat = getCategory();
   ctx.clearRect(0, 0, RENDER.w, RENDER.h);
 
   const img = state.images[i]?.img;
