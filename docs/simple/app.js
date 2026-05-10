@@ -93,24 +93,30 @@ function loadOverlayForCategory(cat) {
   });
 }
 
-/** Portrait (taller than wide): scale so drawn width = this fraction of frame width (may extend past top/bottom). */
+/**
+ * Reference dimensions that looked correct in the frame (contain fit on dst).
+ * Every image uses at least this scale so nothing appears smaller than that photo.
+ */
+const REF_CONTAIN_SIZE = { w: 1226, h: 935 };
+
+/** Portrait (taller than wide): also require at least this draw-width vs frame (can extend vertically). */
 const PORTRAIT_TARGET_WIDTH_RATIO = 0.75;
 
+/** Horizontal centre of the image (1920×1080 stage); left edge = this minus half draw width. */
+const IMAGE_ANCHOR_X = 1125;
+
 function fitContain(srcW, srcH, dstW, dstH) {
-  const portrait = srcH > srcW;
-  let s;
-  let w;
-  let h;
-  if (portrait) {
-    w = dstW * PORTRAIT_TARGET_WIDTH_RATIO;
-    s = w / srcW;
-    h = srcH * s;
-  } else {
-    s = Math.min(dstW / srcW, dstH / srcH);
-    w = srcW * s;
-    h = srcH * s;
+  if (!srcW || !srcH) return { x: 0, y: 0, w: 0, h: 0 };
+  const sRef = Math.min(dstW / REF_CONTAIN_SIZE.w, dstH / REF_CONTAIN_SIZE.h);
+  let s = Math.min(dstW / srcW, dstH / srcH);
+  s = Math.max(s, sRef);
+  if (srcH > srcW) {
+    const sPortraitW = (dstW * PORTRAIT_TARGET_WIDTH_RATIO) / srcW;
+    s = Math.max(s, sPortraitW);
   }
-  return { x: (dstW - w) / 2, y: (dstH - h) / 2, w, h };
+  const w = srcW * s;
+  const h = srcH * s;
+  return { x: IMAGE_ANCHOR_X - w / 2, y: (dstH - h) / 2, w, h };
 }
 
 function drawFrame(i) {
